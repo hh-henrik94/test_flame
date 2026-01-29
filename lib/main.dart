@@ -124,7 +124,7 @@ class MyGame extends Forge2DGame with TapCallbacks {
     final centerX = size.x / 2;
     final offset = random.nextBool() ? -2.0 : 2.0;
 
-    addBall(centerX + offset, 100);
+    addBall(centerX + offset, 80);
   }
   
   void addBall(double x, double y) {
@@ -154,7 +154,7 @@ class HoleComponent extends PositionComponent {
       ..color = Colors.blue;
 
     canvas.drawCircle(
-      Offset(game.size.x / 2, game.size.y/3),
+      Offset(game.size.x / 2,80),
       game.size.toRect().width / (Walls.startCount * Walls.steps),
       paint,
     );
@@ -176,7 +176,7 @@ class Ball extends BodyComponent<MyGame> {
     add(
       SpriteComponent(
         sprite: Sprite(game.images.fromCache(asset)),
-        size: Vector2.all(max(18, game.size.x / (Walls.endCount * 2.2))),
+        size: Vector2.all(max(18, game.size.x / (Walls.endCount * 1.5))),
         anchor: Anchor.center,
       ),
     );
@@ -210,14 +210,14 @@ class Ball extends BodyComponent<MyGame> {
 class Walls extends BodyComponent<MyGame> {
   // ✅ меняешь ТОЛЬКО это:
   static const int startCount = 3; // верхний ряд
-  static const int steps = 16; // сколько рядов вниз
+  static const int steps = 8; // сколько рядов вниз
 
   // ✅ авто:
   static int get endCount => startCount + (steps - 1);
 
   static const double pegRadius = 6;
   static const double bottomPadding = 40;
-  static const double topPadding = 200;
+  static const double topPadding = 120;
 
   // если хочешь чтобы прям “в край” — оставляй 0
   static const double wallMargin = 0;
@@ -272,7 +272,7 @@ class Walls extends BodyComponent<MyGame> {
         add(
           Peg(
             position: Vector2(x, y),
-            radius: rect.width / (startCount * steps * pegRadius),
+            radius: rect.width / (startCount * steps * pegRadius-10),
           ),
         );
       }
