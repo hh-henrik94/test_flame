@@ -38,7 +38,6 @@ class MyFlame extends StatelessWidget {
     "box_7.png",
     "box_8.png",
     "box_9.png",
-
   ];
 
   @override
@@ -46,10 +45,18 @@ class MyFlame extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        body: Center(
-          child: GameWidget(
-            game: MyGame(balls: list, listBoxes: listBox),
-          ),
+        body: Column(
+          children: [
+            Center(
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width,
+                height: MediaQuery.of(context).size.height / 1.8,
+                child: GameWidget(
+                  game: MyGame(balls: list, listBoxes: listBox),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -57,7 +64,8 @@ class MyFlame extends StatelessWidget {
 }
 
 class MyGame extends Forge2DGame with TapCallbacks {
-  MyGame({required this.balls, required this.listBoxes}) : super(gravity: Vector2(0, 120));
+  MyGame({required this.balls, required this.listBoxes})
+    : super(gravity: Vector2(0, 120));
 
   final List<String> balls;
   final List<String> listBoxes;
@@ -67,14 +75,7 @@ class MyGame extends Forge2DGame with TapCallbacks {
   Future<void> onLoad() async {
     await super.onLoad();
 
-    // ✅ грузим все ассеты (шары + пины)
-    await images.loadAll([
-      ...balls,
-      ...listBoxes,
-      'ball.png',
-      'sel_ball.png',
-      // 'assets/peg_hit.png', // <-- если хочешь менять картинку при касании
-    ]);
+    await images.loadAll([...balls, ...listBoxes, 'ball.png', 'sel_ball.png']);
 
     add(Walls());
   }
@@ -104,7 +105,7 @@ class Ball extends BodyComponent<MyGame> {
     add(
       SpriteComponent(
         sprite: Sprite(game.images.fromCache(asset)),
-        size: Vector2.all(32),
+        size: Vector2.all(max(18, game.size.x / (Walls.endCount * 2.2))),
         anchor: Anchor.center,
       ),
     );
@@ -112,7 +113,9 @@ class Ball extends BodyComponent<MyGame> {
 
   @override
   Body createBody() {
-    final shape = CircleShape()..radius = 12;
+    final r = max(8.0, game.size.x / (Walls.endCount * 5.0));
+
+    final shape = CircleShape()..radius = r;
 
     final fixtureDef = FixtureDef(shape)
       ..density = 1.0
@@ -122,10 +125,10 @@ class Ball extends BodyComponent<MyGame> {
     final bodyDef = BodyDef()
       ..type = BodyType.dynamic
       ..position = position
-      ..bullet = true; // ✅ чтобы не "пропускал" пины
+      ..bullet = true;
 
     final body = world.createBody(bodyDef);
-    body.userData = this; // ✅ чтобы пины могли понять "кто ударил"
+    body.userData = this;
     body.createFixture(fixtureDef);
     return body;
   }
@@ -134,71 +137,87 @@ class Ball extends BodyComponent<MyGame> {
 // ======================= WALLS + PEG GRID =======================
 
 class Walls extends BodyComponent<MyGame> {
+  // ✅ меняешь ТОЛЬКО это:
+  static const int startCount = 3; // верхний ряд
+  static const int steps = 16; // сколько рядов вниз
+
+  // ✅ авто:
+  static int get endCount => startCount + (steps - 1);
+
+  static const double pegRadius = 6;
+  static const double bottomPadding = 40;
+  static const double topPadding = 200;
+
+  // если хочешь чтобы прям “в край” — оставляй 0
+  static const double wallMargin = 0;
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
     final rect = game.size.toRect();
 
-    final top = Vector2(rect.topCenter.dx, rect.top);
-    final leftBottom = Vector2(rect.left, rect.bottom);
-    final rightBottom = Vector2(rect.right, rect.bottom);
+    final topY = rect.top + topPadding;
+    final bottomY = rect.bottom - bottomPadding;
 
-    // ===== красиво: 3..10 =====
-    const int startCount = 3;
-    const int endCount = 10;
-    final int rows = endCount - startCount + 1;
+    final height = (bottomY - topY).clamp(0.0, double.infinity);
+    final spacingY = steps <= 1 ? 0.0 : height / (steps - 1);
 
-    const double startY = 200;
-    const double spacingY = 60;
-    const double spacingX = 80;
+    // доступная ширина "внутри"
+    final minXGlobal = rect.left + pegRadius + wallMargin;
+    final maxXGlobal = rect.right - pegRadius - wallMargin;
+    final fullWidth = (maxXGlobal - minXGlobal).clamp(0.0, double.infinity);
 
-    const double pegRadius = 6;
-    const double extraMargin = 14;
+    // базовый spacing по низу (чтобы низ лег ровно)
+    final baseSpacingX = endCount <= 1 ? 0.0 : fullWidth / (endCount - 1);
 
-    final bottomY = rect.bottom;
-    final height = bottomY - top.y;
+    final centerX = rect.center.dx;
 
-    for (int row = 0; row < rows; row++) {
-      final y = startY + row * spacingY;
-      if (y >= bottomY - (pegRadius + extraMargin)) break;
+    for (int row = 0; row < steps; row++) {
+      final pegsInRow = startCount + row; // 3,4,5...
 
-      final pegsInRow = startCount + row;
+      final y = topY + row * spacingY;
 
-      final t = height == 0 ? 0.0 : ((y - top.y) / height).clamp(0.0, 1.0);
+      if (pegsInRow <= 1) {
+        add(Peg(position: Vector2(centerX, y), radius: pegRadius));
+        continue;
+      }
 
-      final leftX = top.x + (leftBottom.x - top.x) * t;
-      final rightX = top.x + (rightBottom.x - top.x) * t;
+      // ✅ ключ: ширина ряда считается от baseSpacingX,
+      // поэтому границы всех рядов идут по прямой, без “дуги”
+      var rowWidth = baseSpacingX * (pegsInRow - 1);
 
-      final minX = leftX + pegRadius + extraMargin;
-      final maxX = rightX - pegRadius - extraMargin;
+      // на всякий случай clamp (если вдруг огромные значения)
+      rowWidth = rowWidth.clamp(0.0, fullWidth);
 
-      final available = maxX - minX;
-      if (available <= 0) continue;
+      final leftX = (centerX - rowWidth / 2).clamp(minXGlobal, maxXGlobal);
+      final rightX = (centerX + rowWidth / 2).clamp(minXGlobal, maxXGlobal);
 
-      final neededWidth = (pegsInRow - 1) * spacingX;
-      final effectiveSpacingX =
-          neededWidth <= available ? spacingX : (available / (pegsInRow - 1));
-
-      final totalWidth = (pegsInRow - 1) * effectiveSpacingX;
-      final startX = (minX + maxX) / 2 - totalWidth / 2;
+      final effectiveWidth = (rightX - leftX).clamp(0.0, double.infinity);
+      final spacingX = effectiveWidth / (pegsInRow - 1);
 
       for (int col = 0; col < pegsInRow; col++) {
-        final x = startX + col * effectiveSpacingX;
-        add(Peg(position: Vector2(x, y), radius: pegRadius));
+        final x = leftX + col * spacingX;
+        add(
+          Peg(
+            position: Vector2(x, y),
+            radius: rect.width / (startCount * steps * pegRadius),
+          ),
+        );
       }
     }
   }
 
   @override
   Body createBody() {
+    // ❌ стены НЕ трогаю (как ты просил)
     final body = world.createBody(BodyDef()..type = BodyType.static);
 
     final rect = game.size.toRect();
     final shape = EdgeShape();
     final fix = FixtureDef(shape);
 
-    // правая наклонная
+    // правая
     shape.set(
       Vector2(rect.topRight.dx, rect.top),
       Vector2(rect.right, rect.bottom),
@@ -212,10 +231,10 @@ class Walls extends BodyComponent<MyGame> {
     );
     body.createFixture(fix);
 
-    // левая наклонная
+    // левая
     shape.set(
       Vector2(rect.left, rect.bottom),
-      Vector2(rect.topLeft.dx , rect.top),
+      Vector2(rect.topLeft.dx, rect.top),
     );
     body.createFixture(fix);
 
@@ -223,7 +242,7 @@ class Walls extends BodyComponent<MyGame> {
   }
 }
 
-// ======================= PEG (image + border on hit) =======================
+// ======================= PEG =======================
 
 class Peg extends BodyComponent<MyGame> with ContactCallbacks {
   Peg({required this.position, this.radius = 7});
@@ -240,21 +259,18 @@ class Peg extends BodyComponent<MyGame> with ContactCallbacks {
   Future<void> onLoad() async {
     await super.onLoad();
 
-    // Картинка пина
     _spriteComp = SpriteComponent(
       sprite: Sprite(game.images.fromCache('ball.png')),
       size: Vector2.all(radius * 2),
       anchor: Anchor.center,
     );
 
-    // Бордер (ring) — по умолчанию прозрачный
     _border = CircleComponent(
       radius: radius + 3,
       paint: Paint()..color = Colors.transparent,
       anchor: Anchor.center,
     );
 
-    // порядок важен: сначала бордер (сзади), потом картинка
     add(_border);
     add(_spriteComp);
   }
@@ -287,20 +303,11 @@ class Peg extends BodyComponent<MyGame> with ContactCallbacks {
     if (_hit) return;
     _hit = true;
 
-    // включаем бордер
-    _border.paint.color = Color(0xFFF971B2);
-
-    // если хочешь смену картинки при касании — раскомментируй:
-    // _spriteComp.sprite = Sprite(game.images.fromCache('sel_ball.png'));
+    _border.paint.color = const Color(0xFFF971B2);
 
     Future.delayed(const Duration(milliseconds: 180), () {
       if (!isMounted) return;
-
       _border.paint.color = Colors.transparent;
-
-      // и обратно вернуть картинку:
-      // _spriteComp.sprite = Sprite(game.images.fromCache('assets/peg.png'));
-
       _hit = false;
     });
   }
