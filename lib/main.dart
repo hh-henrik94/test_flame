@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flame/components.dart';
@@ -42,6 +43,7 @@ class MyFlame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    MyGame game = MyGame(balls: list, listBoxes: listBox);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
@@ -51,10 +53,21 @@ class MyFlame extends StatelessWidget {
               child: SizedBox(
                 width: MediaQuery.of(context).size.width,
                 height: MediaQuery.of(context).size.height / 1.8,
-                child: GameWidget(
-                  game: MyGame(balls: list, listBoxes: listBox),
-                ),
+                child: GameWidget(game: game),
               ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+game.requestBall();
+                // final random = Random();
+                // final x =
+                //     MediaQuery.of(context).size.width / 2 +
+                //     (random.nextBool() ? -2 : 2);
+
+                // game.addBall(x, 100);
+              
+              },
+              child: Text("VAY ARA"),
             ),
           ],
         ),
@@ -74,19 +87,77 @@ class MyGame extends Forge2DGame with TapCallbacks {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-
     await images.loadAll([...balls, ...listBoxes, 'ball.png', 'sel_ball.png']);
 
     add(Walls());
+    add(HoleComponent(game: this));
   }
 
   @override
   Color backgroundColor() => Colors.purple;
 
+  int ballsQueue = 0;
+  double spawnTimer = 0;
+  double spawnInterval = 0.4; 
+
   @override
-  void onTapDown(TapDownEvent event) {
+  void update(double dt) {
+    super.update(dt);
+
+   
+  if (ballsQueue > 0) {
+    spawnTimer += dt;
+
+    if (spawnTimer >= spawnInterval) {
+      spawnTimer -= spawnInterval; // ВАЖНО
+      _spawnBall();
+      ballsQueue--;
+    }}
+  }
+
+  void requestBall() {
+    ballsQueue++;
+  }
+
+  void _spawnBall() {
+    final random = Random();
+    final centerX = size.x / 2;
+    final offset = random.nextBool() ? -2.0 : 2.0;
+
+    addBall(centerX + offset, 100);
+  }
+  
+  void addBall(double x, double y) {
     final asset = balls[_rnd.nextInt(balls.length)];
-    add(Ball(position: event.localPosition, asset: asset));
+    add(Ball(position: Vector2(x, y), asset: asset));
+  }
+
+  // @override
+  // void onTapDown(TapDownEvent event) {
+  //   final asset = balls[_rnd.nextInt(balls.length)];
+  //   add(Ball(position: event.localPosition, asset: asset));
+  // }
+}
+
+class HoleComponent extends PositionComponent {
+  final MyGame game;
+
+  HoleComponent({required this.game});
+
+  @override
+  void render(Canvas canvas) {
+    super.render(canvas);
+
+    final paint = Paint()
+      ..style = PaintingStyle.fill
+      ..strokeWidth = 4
+      ..color = Colors.blue;
+
+    canvas.drawCircle(
+      Offset(game.size.x / 2, game.size.y/3),
+      game.size.toRect().width / (Walls.startCount * Walls.steps),
+      paint,
+    );
   }
 }
 
