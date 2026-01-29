@@ -184,7 +184,7 @@ class Ball extends BodyComponent<MyGame> {
 
   @override
   Body createBody() {
-    final r = max(8.0, game.size.x / (Walls.endCount * 5.0));
+    final r = max(8.0, game.size.x / (Walls.endCount * 4));
 
     final shape = CircleShape()..radius = r;
 
